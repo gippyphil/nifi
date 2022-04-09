@@ -88,6 +88,7 @@ public class SplitContent extends AbstractProcessor {
 
     static final AllowableValue HEX_FORMAT = new AllowableValue("Hexadecimal", "Hexadecimal", "The Byte Sequence will be interpreted as a hexadecimal representation of bytes");
     static final AllowableValue UTF8_FORMAT = new AllowableValue("Text", "Text", "The Byte Sequence will be interpreted as UTF-8 Encoded text");
+    static final AllowableValue REGEX_FORMAT = new AllowableValue("Regex", "Regular Expression", "The Byte Sequence will be interpreted as a regular expression");
 
     static final AllowableValue TRAILING_POSITION = new AllowableValue("Trailing", "Trailing", "Keep the Byte Sequence at the end of the first split if <Keep Byte Sequence> is true");
     static final AllowableValue LEADING_POSITION = new AllowableValue("Leading", "Leading", "Keep the Byte Sequence at the beginning of the second split if <Keep Byte Sequence> is true");
@@ -96,7 +97,7 @@ public class SplitContent extends AbstractProcessor {
             .name("Byte Sequence Format")
             .description("Specifies how the <Byte Sequence> property should be interpreted")
             .required(true)
-            .allowableValues(HEX_FORMAT, UTF8_FORMAT)
+            .allowableValues(HEX_FORMAT, UTF8_FORMAT, REGEX_FORMAT)
             .defaultValue(HEX_FORMAT.getValue())
             .build();
     public static final PropertyDescriptor BYTE_SEQUENCE = new PropertyDescriptor.Builder()
@@ -167,6 +168,13 @@ public class SplitContent extends AbstractProcessor {
         if (HEX_FORMAT.getValue().equals(format)) {
             final String byteSequence = validationContext.getProperty(BYTE_SEQUENCE).getValue();
             final ValidationResult result = new HexStringPropertyValidator().validate(BYTE_SEQUENCE.getName(), byteSequence, validationContext);
+            results.add(result);
+        }
+        else if (REGEX_FORMAT.getValue().equals(format)) {
+            final ValidationResult result = StandardValidators.REGULAR_EXPRESSION_VALIDATOR.validate(
+BYTE_SEQUENCE.getName(),
+new String(byteSequence.get()),
+validationContext);
             results.add(result);
         }
         return results;

@@ -339,6 +339,20 @@ public class TestSplitContent {
         splits.get(1).assertContentEquals(new byte[]{1, 2, 3, 4});
     }
 
+    public void testRegexFormattedSequenceValidation() throws Exception
+    {
+        final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
+        runner.setProperty(SplitContent.FORMAT, SplitContent.REGEX_FORMAT.getValue());
+
+        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\n\r+"); // missing ] symbol
+        runner.assertNotValid();
+        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\n\r]+"); // corrected the regex error
+        runner.assertValid();
+
+        //runner.enqueue("Line one\r\nLine two\n\n\nLine three".getBytes());
+
+    }
+
     @Test
     public void testSmallSplitsThenMerge() throws IOException {
         final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
