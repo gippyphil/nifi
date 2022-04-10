@@ -19,6 +19,7 @@ package org.apache.nifi.processors.standard;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -30,6 +31,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.nifi.annotation.behavior.EventDriven;
@@ -171,10 +174,8 @@ public class SplitContent extends AbstractProcessor {
             results.add(result);
         }
         else if (REGEX_FORMAT.getValue().equals(format)) {
-            final ValidationResult result = StandardValidators.REGULAR_EXPRESSION_VALIDATOR.validate(
-BYTE_SEQUENCE.getName(),
-new String(byteSequence.get()),
-validationContext);
+            final String byteSequence = validationContext.getProperty(BYTE_SEQUENCE).getValue();
+            final ValidationResult result = StandardValidators.REGULAR_EXPRESSION_VALIDATOR.validate(BYTE_SEQUENCE.getName(), byteSequence, validationContext);
             results.add(result);
         }
         return results;
@@ -225,44 +226,76 @@ validationContext);
 
         final List<Tuple<Long, Long>> splits = new ArrayList<>();
 
-        final NaiveSearchRingBuffer buffer = new NaiveSearchRingBuffer(byteSequence);
-        session.read(flowFile, new InputStreamCallback() {
-            @Override
-            public void process(final InputStream rawIn) throws IOException {
-                long bytesRead = 0L;
-                long startOffset = 0L;
+        if (context.getProperty(FORMAT).getValue().equals(REGEX_FORMAT.getValue())) {
+            final Pattern splitPattern = Pattern.compile(context.getProperty(BYTE_SEQUENCE).getValue());
+            session.read(flowFile, new InputStreamCallback() {
+                @Override
+                public void process(final InputStream rawIn) throws IOException {
+                    InputStreamReader charsReader = new InputStreamReader(rawIn, StandardCharsets.UTF_8); // TODO: configurable property?
+                    char[] charBuffer = new char[8]; // TODO: configurable property
+                    StringBuffer contentBuffer = new StringBuffer();
+                    long charsRead = 0;
 
-                try (final InputStream in = new BufferedInputStream(rawIn)) {
-                    while (true) {
-                        final int nextByte = in.read();
-                        if (nextByte == -1) {
+                    do {
+                        // read a string from the flowfile
+                        charsRead = charsReader.read(charBuffer, 0, charBuffer.length);
+                        if (charsRead <= 0)
                             return;
+logger.info("Read {} chars: {}", charsRead, contentBuffer);
+                        // add the string to the current buffer
+                        contentBuffer.append(charBuffer);
+
+                        // search for the pattern in the buffer
+                        Matcher splitMatcher = splitPattern.matcher(contentBuffer);
+                        while (splitMatcher.find())
+                        {
+logger.info("Found a match at index " + splitMatcher.start());
                         }
+                    } while (charsRead == charBuffer.length);
+                }
+            });
+        }
+        else
+        {
+            final NaiveSearchRingBuffer buffer = new NaiveSearchRingBuffer(byteSequence);
+            session.read(flowFile, new InputStreamCallback() {
+                @Override
+                public void process(final InputStream rawIn) throws IOException {
+                    long bytesRead = 0L;
+                    long startOffset = 0L;
 
-                        bytesRead++;
-                        boolean matched = buffer.addAndCompare((byte) (nextByte & 0xFF));
-                        if (matched) {
-                            long splitLength;
-
-                            if (keepTrailingSequence) {
-                                splitLength = bytesRead - startOffset;
-                            } else {
-                                splitLength = bytesRead - startOffset - byteSequence.length;
+                    try (final InputStream in = new BufferedInputStream(rawIn)) {
+                        while (true) {
+                            final int nextByte = in.read();
+                            if (nextByte == -1) {
+                                return;
                             }
 
-                            if (keepLeadingSequence && startOffset > 0) {
-                                splitLength += byteSequence.length;
-                            }
+                            bytesRead++;
+                            boolean matched = buffer.addAndCompare((byte) (nextByte & 0xFF));
+                            if (matched) {
+                                long splitLength;
 
-                            final long splitStart = (keepLeadingSequence && startOffset > 0) ? startOffset - byteSequence.length : startOffset;
-                            splits.add(new Tuple<>(splitStart, splitLength));
-                            startOffset = bytesRead;
-                            buffer.clear();
+                                if (keepTrailingSequence) {
+                                    splitLength = bytesRead - startOffset;
+                                } else {
+                                    splitLength = bytesRead - startOffset - byteSequence.length;
+                                }
+
+                                if (keepLeadingSequence && startOffset > 0) {
+                                    splitLength += byteSequence.length;
+                                }
+
+                                final long splitStart = (keepLeadingSequence && startOffset > 0) ? startOffset - byteSequence.length : startOffset;
+                                splits.add(new Tuple<>(splitStart, splitLength));
+                                startOffset = bytesRead;
+                                buffer.clear();
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
 
         long lastOffsetPlusSize = -1L;
         final ArrayList<FlowFile> splitList = new ArrayList<>();

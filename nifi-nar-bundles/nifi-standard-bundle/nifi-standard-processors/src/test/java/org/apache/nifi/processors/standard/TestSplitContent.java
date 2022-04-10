@@ -339,18 +339,30 @@ public class TestSplitContent {
         splits.get(1).assertContentEquals(new byte[]{1, 2, 3, 4});
     }
 
-    public void testRegexFormattedSequenceValidation() throws Exception
-    {
+    @Test
+    public void testRegexFormattedSequenceValidation() throws IOException {
         final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
+        runner.setProperty(SplitContent.KEEP_SEQUENCE, "false");
         runner.setProperty(SplitContent.FORMAT, SplitContent.REGEX_FORMAT.getValue());
 
-        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\n\r+"); // missing ] symbol
+        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r+"); // missing ] symbol
         runner.assertNotValid();
-        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\n\r]+"); // corrected the regex error
+
+        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r]+"); // corrected the regex error
         runner.assertValid();
+    }
 
-        //runner.enqueue("Line one\r\nLine two\n\n\nLine three".getBytes());
+    @Test
+    public void testRegexSimpleSearch () throws IOException {
+        final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
+        runner.setProperty(SplitContent.KEEP_SEQUENCE, "false");
+        runner.setProperty(SplitContent.FORMAT, SplitContent.REGEX_FORMAT.getValue());
 
+        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r]+");
+
+        runner.enqueue("This is line one\r\nLine 2\n\n\nAnd this is a very long (relative to the buffer size) line three".getBytes());
+
+        runner.run();
     }
 
     @Test
