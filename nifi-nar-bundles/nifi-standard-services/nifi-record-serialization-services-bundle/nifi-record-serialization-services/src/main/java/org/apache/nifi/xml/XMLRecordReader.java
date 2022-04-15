@@ -31,14 +31,16 @@ import org.apache.nifi.serialization.record.type.MapDataType;
 import org.apache.nifi.serialization.record.type.RecordDataType;
 import org.apache.nifi.serialization.record.util.DataTypeUtils;
 import org.apache.nifi.util.StringUtils;
+import org.apache.nifi.xml.processing.stream.StandardXMLEventReaderProvider;
+import org.apache.nifi.xml.processing.stream.XMLEventReaderProvider;
 
 import javax.xml.stream.XMLEventReader;
-import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.Attribute;
 import javax.xml.stream.events.Characters;
 import javax.xml.stream.events.StartElement;
 import javax.xml.stream.events.XMLEvent;
+import javax.xml.transform.stream.StreamSource;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.DateFormat;
@@ -82,13 +84,8 @@ public class XMLRecordReader implements RecordReader {
         LAZY_TIMESTAMP_FORMAT = () -> tsf;
 
         try {
-            final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
-
-            // Avoid XXE Vulnerabilities
-            xmlInputFactory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
-            xmlInputFactory.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
-
-            xmlEventReader = xmlInputFactory.createXMLEventReader(in);
+            final XMLEventReaderProvider provider = new StandardXMLEventReaderProvider();
+            xmlEventReader = provider.getEventReader(new StreamSource(in));
 
             if (isArray) {
                 skipNextStartTag();
@@ -339,8 +336,8 @@ public class XMLRecordReader implements RecordReader {
                 if (contentFieldName != null) {
                     recordValues.put(contentFieldName, content.toString());
                 } else {
-                    logger.debug("Found content for field that has to be parsed as record but property \"Field Name for Content\" is not set. " +
-                            "The content will not be added to the record.");
+                    logger.debug("Found content for a field that was supposed to be named with the value of the \"Field Name for Content\" property but " +
+                            "the property was not set. The content was not added to the record.");
                 }
 
                 return new MapRecord(new SimpleRecordSchema(Collections.emptyList()), recordValues);
@@ -486,10 +483,13 @@ public class XMLRecordReader implements RecordReader {
                 if (field.isPresent()) {
                     Object value = parseStringForType(content.toString(), contentFieldName, field.get().getDataType());
                     recordValues.put(contentFieldName, value);
+                } else {
+                    logger.debug("Found content for a field that was supposed to be named with the value of the \"Field Name for Content\" property " +
+                            "but no such field was present in the schema. The content was not added to the record.");
                 }
             } else {
-                logger.debug("Found content for field that is defined as record but property \"Field Name for Content\" is not set. " +
-                        "The content will not be added to record.");
+                logger.debug("Found content for a field that was supposed to be named with the value of the \"Field Name for Content\" property but " +
+                        "the property was not set. The content was not added to the record.");
             }
         }
 

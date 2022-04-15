@@ -17,14 +17,17 @@
 package org.apache.nifi.xml.inference;
 
 import org.apache.nifi.schema.inference.RecordSource;
+import org.apache.nifi.xml.processing.ProcessingException;
+import org.apache.nifi.xml.processing.stream.StandardXMLEventReaderProvider;
+import org.apache.nifi.xml.processing.stream.XMLEventReaderProvider;
 
 import javax.xml.stream.XMLEventReader;
-import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.events.Attribute;
 import javax.xml.stream.events.Characters;
 import javax.xml.stream.events.StartElement;
 import javax.xml.stream.events.XMLEvent;
+import javax.xml.transform.stream.StreamSource;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,21 +38,18 @@ import java.util.Map;
 public class XmlRecordSource implements RecordSource<XmlNode> {
 
     private final XMLEventReader xmlEventReader;
+    private final String contentFieldName;
 
-    public XmlRecordSource(final InputStream in, final boolean ignoreWrapper) throws IOException {
+    public XmlRecordSource(final InputStream in, final String contentFieldName, final boolean ignoreWrapper) throws IOException {
+        this.contentFieldName = contentFieldName;
         try {
-            final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
-
-            // Avoid XXE Vulnerabilities
-            xmlInputFactory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
-            xmlInputFactory.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
-
-            xmlEventReader = xmlInputFactory.createXMLEventReader(in);
+            final XMLEventReaderProvider provider = new StandardXMLEventReaderProvider();
+            xmlEventReader = provider.getEventReader(new StreamSource(in));
 
             if (ignoreWrapper) {
                 readStartElement();
             }
-        } catch (XMLStreamException e) {
+        } catch (final ProcessingException|XMLStreamException e) {
             throw new IOException("Could not parse XML", e);
         }
     }
@@ -125,7 +125,7 @@ public class XmlRecordSource implements RecordSource<XmlNode> {
         } else {
             final String textContent = content.toString().trim();
             if (!textContent.equals("")) {
-                childNodes.put("value", new XmlTextNode("value", textContent));
+                childNodes.put(contentFieldName, new XmlTextNode(contentFieldName, textContent));
             }
 
             return new XmlContainerNode(nodeName, childNodes);
