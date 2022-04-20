@@ -356,11 +356,12 @@ public class TestSplitContent {
     public void testRegexSimpleSearch () throws IOException {
         final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
         runner.setProperty(SplitContent.KEEP_SEQUENCE, "false");
+        runner.setProperty(SplitContent.BUFFER_SIZE, "8 B");
         runner.setProperty(SplitContent.FORMAT, SplitContent.REGEX_FORMAT.getValue());
 
         runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r]+");
 
-        runner.enqueue("This is line one\r\nLine 2\n\n\nAnd this is a very long (relative to the buffer size) line three".getBytes());
+        runner.enqueue("\u0394. This is line one\r\nLine 2\n\n\nAnd this is a very long (relative to the buffer size) line three".getBytes());
 
         runner.run();
     }

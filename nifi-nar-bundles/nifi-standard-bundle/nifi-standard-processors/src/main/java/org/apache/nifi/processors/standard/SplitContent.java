@@ -58,6 +58,7 @@ import org.apache.nifi.flowfile.attributes.CoreAttributes;
 import org.apache.nifi.flowfile.attributes.FragmentAttributes;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.AbstractProcessor;
+import org.apache.nifi.processor.DataUnit;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessorInitializationContext;
@@ -124,6 +125,14 @@ public class SplitContent extends AbstractProcessor {
             .allowableValues(TRAILING_POSITION, LEADING_POSITION)
             .defaultValue(TRAILING_POSITION.getValue())
             .build();
+    public static final PropertyDescriptor BUFFER_SIZE = new PropertyDescriptor.Builder()
+            .name("Buffer Size")
+            .description("The buffer size to read ahead for regex evaluation.  Please note that whilst this is specified in bytes, it is actually "
+                    + "characters, and may be larger depending on the amount of unicode present in the text")
+            .required(true)
+            .addValidator(StandardValidators.DATA_SIZE_VALIDATOR)
+            .defaultValue("1 KB")
+            .build();
 
     public static final Relationship REL_SPLITS = new Relationship.Builder()
             .name("splits")
@@ -151,6 +160,7 @@ public class SplitContent extends AbstractProcessor {
         properties.add(BYTE_SEQUENCE);
         properties.add(KEEP_SEQUENCE);
         properties.add(BYTE_SEQUENCE_LOCATION);
+        properties.add(BUFFER_SIZE);
         this.properties = Collections.unmodifiableList(properties);
     }
 
@@ -228,6 +238,7 @@ public class SplitContent extends AbstractProcessor {
 
         if (context.getProperty(FORMAT).getValue().equals(REGEX_FORMAT.getValue())) {
             final Pattern splitPattern = Pattern.compile(context.getProperty(BYTE_SEQUENCE).getValue());
+            final int bufferSize = context.getProperty(BUFFER_SIZE).asDataSize(DataUnit.B).intValue();
             session.read(flowFile, new InputStreamCallback() {
                 @Override
                 public void process(final InputStream rawIn) throws IOException {
@@ -241,7 +252,7 @@ public class SplitContent extends AbstractProcessor {
                         charsRead = charsReader.read(charBuffer, 0, charBuffer.length);
                         if (charsRead <= 0)
                             return;
-logger.info("Read {} chars: {}", charsRead, contentBuffer);
+logger.info("Read {} chars: '{}'", charsRead, contentBuffer);
                         // add the string to the current buffer
                         contentBuffer.append(charBuffer);
 
