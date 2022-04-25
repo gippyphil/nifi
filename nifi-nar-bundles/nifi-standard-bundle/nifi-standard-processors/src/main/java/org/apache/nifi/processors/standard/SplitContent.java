@@ -35,6 +35,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.nifi.annotation.behavior.EventDriven;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.InputRequirement.Requirement;
@@ -243,26 +244,69 @@ public class SplitContent extends AbstractProcessor {
                 @Override
                 public void process(final InputStream rawIn) throws IOException {
                     InputStreamReader charsReader = new InputStreamReader(rawIn, StandardCharsets.UTF_8); // TODO: configurable property?
-                    char[] charBuffer = new char[8]; // TODO: configurable property
+                    char[] charBuffer = new char[bufferSize];
                     StringBuffer contentBuffer = new StringBuffer();
-                    long charsRead = 0;
+                    int charsRead = 0;
+                    long previousBuffersBytesLength = 0L;
+                    int endOfLastSplit = 0;
+                    long endOfLastSplitBytesRef = 0L;
 
                     do {
                         // read a string from the flowfile
                         charsRead = charsReader.read(charBuffer, 0, charBuffer.length);
+                        // end of the stream
                         if (charsRead <= 0)
-                            return;
-logger.info("Read {} chars: '{}'", charsRead, contentBuffer);
+                            continue;
+logger.info("Read {} chars: '{}'", charsRead, StringEscapeUtils.escapeJava(new String(charBuffer, 0, (int)charsRead)));
                         // add the string to the current buffer
-                        contentBuffer.append(charBuffer);
+                        contentBuffer.append(charBuffer, 0, (int)charsRead);
 
                         // search for the pattern in the buffer
                         Matcher splitMatcher = splitPattern.matcher(contentBuffer);
-                        while (splitMatcher.find())
-                        {
-logger.info("Found a match at index " + splitMatcher.start());
+                        while (splitMatcher.find()) {
+logger.info("Found a match from " + splitMatcher.start() + " to " + splitMatcher.end());
+                            // TODO: handle when a trailing sequence match ends on the end of our current buffer, and there's
+                            //       more to read - need to read more and try again in case the next char to be read is part
+                            //       of the same regex sequence.  eg: matching /\n+/ with:
+                            //       buffer1 {..., 'L', 'O', '\n'}, buffer2 {'\n', 'W', 'O', ... }
+                            
+                            
+                            
+                            int endOfSplit = -1;
+                            long endOfSplitBytesRef = -1;
+                            if (keepTrailingSequence)
+                                endOfSplit = splitMatcher.end();
+                            else
+                                endOfSplit = splitMatcher.start();
+                            endOfSplitBytesRef = previousBuffersBytesLength + contentBuffer.substring(0, endOfSplit).getBytes().length;
+
+                            
+                            splits.add(new Tuple<>(endOfLastSplitBytesRef, endOfSplitBytesRef - endOfLastSplitBytesRef));
+                            
+//String split = contentBuffer.substring((int)endOfLastSplit, (int)endOfSplit);
+//logger.info("Split Text: '{}'", StringEscapeUtils.escapeJava(split));
+                            
+                            // after we have logged this match, record where to collect the next one from                            
+                            if (keepLeadingSequence)
+                                endOfLastSplit = splitMatcher.start();
+                            else
+                                endOfLastSplit = splitMatcher.end();
+                            endOfLastSplitBytesRef = previousBuffersBytesLength + contentBuffer.substring(0, endOfLastSplit).getBytes().length;
                         }
+                        previousBuffersBytesLength += new String(contentBuffer).getBytes().length;
+                        // we can safely discard the last read buffer now
+                        contentBuffer = new StringBuffer();
+logger.info("previousBuffersByteLength: '{}'", previousBuffersBytesLength);                    
                     } while (charsRead == charBuffer.length);
+                    // do we have a remaining split - TODO: check this logic
+                    if (charsRead > endOfLastSplit)
+                    {
+                        splits.add(new Tuple<>(endOfLastSplitBytesRef, previousBuffersBytesLength - endOfLastSplitBytesRef));
+
+                        
+//String split = contentBuffer.substring((int)endOfLastSplit, (int)charsRead);
+//logger.info("Split Text: '{}'", StringEscapeUtils.escapeJava(split));                    
+                    }
                 }
             });
         }

@@ -18,6 +18,7 @@ package org.apache.nifi.processors.standard;
 
 import java.io.IOException;
 import java.util.List;
+import org.apache.commons.text.StringEscapeUtils;
 
 import org.apache.nifi.util.MockFlowFile;
 import org.apache.nifi.util.TestRunner;
@@ -356,15 +357,58 @@ public class TestSplitContent {
     public void testRegexSimpleSearch () throws IOException {
         final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
         runner.setProperty(SplitContent.KEEP_SEQUENCE, "false");
-        runner.setProperty(SplitContent.BUFFER_SIZE, "8 B");
+        runner.setProperty(SplitContent.BUFFER_SIZE, "1 KB");
         runner.setProperty(SplitContent.FORMAT, SplitContent.REGEX_FORMAT.getValue());
 
         runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r]+");
-
-        runner.enqueue("\u0394. This is line one\r\nLine 2\n\n\nAnd this is a very long (relative to the buffer size) line three".getBytes());
+        
+        String splitStrings[] = {"\u0394: This is line one.", "\u0395. Line 2.", "\u0396: And this is a very long (relative to the buffer size) line three!"};
+        String delimStrings[] = {"\r\n\r\n", "\n\n\n", "\n"};
+        String contentStr = "";
+        for (int i = 0; i < splitStrings.length; i++)
+            contentStr += splitStrings[i] + delimStrings[i];
+        runner.enqueue(contentStr);
 
         runner.run();
+        runner.assertQueueEmpty();
+        final List<MockFlowFile> splits = runner.getFlowFilesForRelationship(SplitContent.REL_SPLITS);
+        
+        for (int i = 0; i < splits.size(); i++) {
+            MockFlowFile split = splits.get(i);
+            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'");
+            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + splitStrings[i] + "'");
+            split.assertContentEquals(splitStrings[i].getBytes());
+        }
     }
+
+    @Test
+    public void testRegexMultiReadSearch () throws IOException {
+        final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
+        runner.setProperty(SplitContent.KEEP_SEQUENCE, "false");
+        // small buffer size
+        runner.setProperty(SplitContent.BUFFER_SIZE, "16B");
+        runner.setProperty(SplitContent.FORMAT, SplitContent.REGEX_FORMAT.getValue());
+
+        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r]+");
+        
+        String splitStrings[] = {"\u0394: This is line one.", "\u0395. Line 2.", "\u0396: And this is a very long (relative to the buffer size) line three!"};
+        String delimStrings[] = {"\r\n\r\n", "\n\n\n", "\n"};
+        String contentStr = "";
+        for (int i = 0; i < splitStrings.length; i++)
+            contentStr += splitStrings[i] + delimStrings[i];
+        runner.enqueue(contentStr);
+
+        runner.run();
+        runner.assertQueueEmpty();
+        final List<MockFlowFile> splits = runner.getFlowFilesForRelationship(SplitContent.REL_SPLITS);
+        
+        for (int i = 0; i < splits.size(); i++) {
+            MockFlowFile split = splits.get(i);
+            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + splitStrings[i] + "'");
+            split.assertContentEquals(splitStrings[i].getBytes());
+        }
+    }
+
 
     @Test
     public void testSmallSplitsThenMerge() throws IOException {
