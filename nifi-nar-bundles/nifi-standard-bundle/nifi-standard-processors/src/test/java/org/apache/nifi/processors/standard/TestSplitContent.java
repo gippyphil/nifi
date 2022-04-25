@@ -362,7 +362,7 @@ public class TestSplitContent {
 
         runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r]+");
         
-        String splitStrings[] = {"\u0394: This is line one.", "\u0395. Line 2.", "\u0396: And this is a very long (relative to the buffer size) line three!"};
+        String splitStrings[] = {"\u0394: This is line one.", "\u0395. Line 2.", "\u0396: And this is line three!"};
         String delimStrings[] = {"\r\n\r\n", "\n\n\n", "\n"};
         String contentStr = "";
         for (int i = 0; i < splitStrings.length; i++)
@@ -375,9 +375,39 @@ public class TestSplitContent {
         
         for (int i = 0; i < splits.size(); i++) {
             MockFlowFile split = splits.get(i);
-            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'");
-            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + splitStrings[i] + "'");
+            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + StringEscapeUtils.escapeJava(splitStrings[i]) + "'");
             split.assertContentEquals(splitStrings[i].getBytes());
+        }
+    }
+
+
+    @Test
+    public void testRegexSimpleTrailingSearch () throws IOException {
+        final TestRunner runner = TestRunners.newTestRunner(new SplitContent());
+    
+        runner.setProperty(SplitContent.KEEP_SEQUENCE, "true");
+        runner.setProperty(SplitContent.BYTE_SEQUENCE_LOCATION, SplitContent.TRAILING_POSITION.getValue());
+
+        runner.setProperty(SplitContent.BUFFER_SIZE, "1 KB");
+        runner.setProperty(SplitContent.FORMAT, SplitContent.REGEX_FORMAT.getValue());
+
+        runner.setProperty(SplitContent.BYTE_SEQUENCE, "[\\n\\r]+");
+        
+        String splitStrings[] = {"\u0394: This is line one.", "\u0395. Line 2.", "\u0396: And this is line three!"};
+        String delimStrings[] = {"\r\n\r\n", "\n\n\n", "\n"};
+        String contentStr = "";
+        for (int i = 0; i < splitStrings.length; i++)
+            contentStr += splitStrings[i] + delimStrings[i];
+        runner.enqueue(contentStr);
+
+        runner.run();
+        runner.assertQueueEmpty();
+        final List<MockFlowFile> splits = runner.getFlowFilesForRelationship(SplitContent.REL_SPLITS);
+        
+        for (int i = 0; i < splits.size(); i++) {
+            MockFlowFile split = splits.get(i);
+            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + StringEscapeUtils.escapeJava(splitStrings[i] + delimStrings[i]) + "'");
+            split.assertContentEquals((splitStrings[i] + delimStrings[i]).getBytes());
         }
     }
 
@@ -404,7 +434,7 @@ public class TestSplitContent {
         
         for (int i = 0; i < splits.size(); i++) {
             MockFlowFile split = splits.get(i);
-            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + splitStrings[i] + "'");
+            runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + StringEscapeUtils.escapeJava(splitStrings[i]) + "'");
             split.assertContentEquals(splitStrings[i].getBytes());
         }
     }
