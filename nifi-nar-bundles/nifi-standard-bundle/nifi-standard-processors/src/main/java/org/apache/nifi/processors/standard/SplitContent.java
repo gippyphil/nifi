@@ -257,18 +257,26 @@ public class SplitContent extends AbstractProcessor {
                         // end of the stream
                         if (charsRead <= 0)
                             continue;
-logger.info("Read {} chars: '{}'", charsRead, StringEscapeUtils.escapeJava(new String(charBuffer, 0, (int)charsRead)));
+//logger.info("Read {} chars: '{}'", charsRead, StringEscapeUtils.escapeJava(new String(charBuffer, 0, (int)charsRead)));
                         // add the string to the current buffer
                         contentBuffer.append(charBuffer, 0, (int)charsRead);
 
                         // search for the pattern in the buffer
                         Matcher splitMatcher = splitPattern.matcher(contentBuffer);
                         while (splitMatcher.find()) {
-logger.info("Found a match from " + splitMatcher.start() + " to " + splitMatcher.end());
-                            // TODO: handle when a trailing sequence match ends on the end of our current buffer, and there's
-                            //       more to read - need to read more and try again in case the next char to be read is part
-                            //       of the same regex sequence.  eg: matching /\n+/ with:
-                            //       buffer1 {..., 'L', 'O', '\n'}, buffer2 {'\n', 'W', 'O', ... }
+//logger.info("Found a match from " + splitMatcher.start() + " to " + splitMatcher.end());
+                            int startOfMatch = splitMatcher.start();
+                            // handle when a trailing sequence match ends on the end of our current buffer, and there's
+                            // more to read - need to read more and try again in case the next char to be read is part
+                            // of the same regex sequence.  eg: matching /\n+/ with:
+                            // buffer1 {..., 'L', 'O', '\n'}, buffer2 {'\n', 'W', 'O', ... }
+                            while (splitMatcher.end() == contentBuffer.length() && charsReader.ready())
+                            {
+//logger.info("Regex ends at boundary! " + splitMatcher.end() + " == " + contentBuffer.length());
+                                //TODO: maybe read more than one byte at a time?
+                                contentBuffer.append((char)charsReader.read());
+                                splitMatcher.find(startOfMatch);
+                            }
                             
                             
                             
@@ -278,13 +286,11 @@ logger.info("Found a match from " + splitMatcher.start() + " to " + splitMatcher
                                 endOfSplit = splitMatcher.end();
                             else
                                 endOfSplit = splitMatcher.start();
+                            // need to convert the buffer char index into a flowfile byte index
                             endOfSplitBytesRef = previousBuffersBytesLength + contentBuffer.substring(0, endOfSplit).getBytes().length;
-
                             
                             splits.add(new Tuple<>(endOfLastSplitBytesRef, endOfSplitBytesRef - endOfLastSplitBytesRef));
-                            
-//String split = contentBuffer.substring((int)endOfLastSplit, (int)endOfSplit);
-//logger.info("Split Text: '{}'", StringEscapeUtils.escapeJava(split));
+                            logger.debug("Split[{}]: {}..{} [{}]", splits.size(), endOfLastSplitBytesRef, endOfSplitBytesRef, (endOfSplitBytesRef - endOfLastSplitBytesRef));
                             
                             // after we have logged this match, record where to collect the next one from                            
                             if (keepLeadingSequence)
@@ -296,16 +302,12 @@ logger.info("Found a match from " + splitMatcher.start() + " to " + splitMatcher
                         previousBuffersBytesLength += new String(contentBuffer).getBytes().length;
                         // we can safely discard the last read buffer now
                         contentBuffer = new StringBuffer();
-logger.info("previousBuffersByteLength: '{}'", previousBuffersBytesLength);                    
+//logger.info("previousBuffersByteLength: '{}'", previousBuffersBytesLength);                    
                     } while (charsRead == charBuffer.length);
-                    // do we have a remaining split - TODO: check this logic
-                    if (charsRead > endOfLastSplit)
-                    {
+                    // do we have a remaining split
+                    if (charsRead > endOfLastSplit)  {
                         splits.add(new Tuple<>(endOfLastSplitBytesRef, previousBuffersBytesLength - endOfLastSplitBytesRef));
-
-                        
-//String split = contentBuffer.substring((int)endOfLastSplit, (int)charsRead);
-//logger.info("Split Text: '{}'", StringEscapeUtils.escapeJava(split));                    
+                        logger.debug("Split: {}..{} [{}]", endOfLastSplitBytesRef, previousBuffersBytesLength, (previousBuffersBytesLength - endOfLastSplitBytesRef));
                     }
                 }
             });
@@ -372,16 +374,18 @@ logger.info("previousBuffersByteLength: '{}'", previousBuffersBytesLength);
                 lastOffsetPlusSize = offset + size;
             }
 
-            // lastOffsetPlusSize indicates the ending position of the last split.
-            // if the data didn't end with the byte sequence, we need one final split to run from the end
-            // of the last split to the end of the content.
-            long finalSplitOffset = lastOffsetPlusSize;
-            if (!keepTrailingSequence && !keepLeadingSequence) {
-                finalSplitOffset += byteSequence.length;
-            }
-            if (finalSplitOffset > -1L && finalSplitOffset < flowFile.getSize()) {
-                FlowFile finalSplit = session.clone(flowFile, finalSplitOffset, flowFile.getSize() - finalSplitOffset);
-                splitList.add(finalSplit);
+            if (!context.getProperty(FORMAT).getValue().equals(REGEX_FORMAT.getValue())) {
+                // lastOffsetPlusSize indicates the ending position of the last split.
+                // if the data didn't end with the byte sequence, we need one final split to run from the end
+                // of the last split to the end of the content.
+                long finalSplitOffset = lastOffsetPlusSize;
+                if (!keepTrailingSequence && !keepLeadingSequence) {
+                    finalSplitOffset += byteSequence.length;
+                }
+                if (finalSplitOffset > -1L && finalSplitOffset < flowFile.getSize()) {
+                    FlowFile finalSplit = session.clone(flowFile, finalSplitOffset, flowFile.getSize() - finalSplitOffset);
+                    splitList.add(finalSplit);
+                }
             }
         }
 
