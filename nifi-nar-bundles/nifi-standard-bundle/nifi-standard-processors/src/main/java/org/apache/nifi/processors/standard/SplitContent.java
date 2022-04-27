@@ -257,14 +257,12 @@ public class SplitContent extends AbstractProcessor {
                         // end of the stream
                         if (charsRead <= 0)
                             continue;
-//logger.info("Read {} chars: '{}'", charsRead, StringEscapeUtils.escapeJava(new String(charBuffer, 0, (int)charsRead)));
                         // add the string to the current buffer
                         contentBuffer.append(charBuffer, 0, (int)charsRead);
 
                         // search for the pattern in the buffer
                         Matcher splitMatcher = splitPattern.matcher(contentBuffer);
                         while (splitMatcher.find()) {
-//logger.info("Found a match from " + splitMatcher.start() + " to " + splitMatcher.end());
                             int startOfMatch = splitMatcher.start();
                             // handle when a trailing sequence match ends on the end of our current buffer, and there's
                             // more to read - need to read more and try again in case the next char to be read is part
@@ -272,7 +270,6 @@ public class SplitContent extends AbstractProcessor {
                             // buffer1 {..., 'L', 'O', '\n'}, buffer2 {'\n', 'W', 'O', ... }
                             while (splitMatcher.end() == contentBuffer.length() && charsReader.ready())
                             {
-//logger.info("Regex ends at boundary! " + splitMatcher.end() + " == " + contentBuffer.length());
                                 //TODO: maybe read more than one byte at a time?
                                 contentBuffer.append((char)charsReader.read());
                                 splitMatcher.find(startOfMatch);
@@ -302,7 +299,6 @@ public class SplitContent extends AbstractProcessor {
                         previousBuffersBytesLength += new String(contentBuffer).getBytes().length;
                         // we can safely discard the last read buffer now
                         contentBuffer = new StringBuffer();
-//logger.info("previousBuffersByteLength: '{}'", previousBuffersBytesLength);                    
                     } while (charsRead == charBuffer.length);
                     // do we have a remaining split
                     if (charsRead > endOfLastSplit)  {

@@ -21,7 +21,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.commons.text.StringEscapeUtils;
 
 import org.apache.nifi.util.MockFlowFile;
 import org.apache.nifi.util.TestRunner;
@@ -380,7 +379,6 @@ public class TestSplitContent {
         
         for (int i = 0; i < splits.size(); i++) {
             MockFlowFile split = splits.get(i);
-//runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + StringEscapeUtils.escapeJava(splitStrings[i]) + "'");
             split.assertContentEquals(splitStrings[i].getBytes());
         }
     }
@@ -411,7 +409,6 @@ public class TestSplitContent {
         
         for (int i = 0; i < splits.size(); i++) {
             MockFlowFile split = splits.get(i);
-//runner.getLogger().info("Split: '" + StringEscapeUtils.escapeJava(split.getContent()) + "'   Original: '" + StringEscapeUtils.escapeJava(splitStrings[i] + delimStrings[i]) + "'");
             split.assertContentEquals((splitStrings[i] + delimStrings[i]).getBytes());
         }
     }
